@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from agent.llm_client import DeepSeekClient
@@ -12,7 +13,15 @@ def process_customer_message(message: str) -> dict[str, Any]:
     menu_json = sheets.get_menu_json()
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(menu_json=menu_json)
     client = DeepSeekClient()
-    result = client.chat(system_prompt, message)
+
+    try:
+        result = client.chat(system_prompt, message)
+    except (json.JSONDecodeError, Exception):
+        return {
+            "intent": "unknown",
+            "reply": "Sorry, I couldn't understand that. Could you rephrase?",
+            "data": {},
+        }
 
     if not isinstance(result, dict):
         return {

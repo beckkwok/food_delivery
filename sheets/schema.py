@@ -1,5 +1,5 @@
 ORDERS_HEADERS = [
-    "OrderID", "TelegramID", "CustomerName",
+    "OrderID", "TelegramID", "CustomerName", "Telephone",
     "Items", "Total", "Allergies",
     "SpecialInstructions", "DeliveryAddress",
     "DeliveryTime", "Status", "Language",

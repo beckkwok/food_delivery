@@ -97,7 +97,7 @@ class TestHandleMessage:
         assert result == ConversationHandler.END
         update.message.reply_text.assert_awaited_with("Hello!")
 
-    async def test_order_intent_enters_confirmation(self, mocker) -> None:
+    async def test_order_intent_missing_fields(self, mocker) -> None:
         mocker.patch(
             "bot.handlers.process_customer_message",
             return_value={
@@ -106,16 +106,50 @@ class TestHandleMessage:
                 "data": {
                     "items": [{"item_id": "S1", "name": "Teriyaki Chicken", "quantity": 2, "unit_price": 9.00}],
                     "total": 18.00,
+                    "customer_name": "",
+                    "telephone": "",
+                    "delivery_address": "",
                 },
             },
         )
         update = _make_update("2 teriyaki chicken")
         context = MagicMock()
         result = await handle_message(update, context)
+        assert result == ConversationHandler.END
+        reply_text = update.message.reply_text.call_args[0][0]
+        assert "your name" in reply_text.lower()
+        assert "your phone" in reply_text.lower()
+        assert "your delivery" in reply_text.lower()
+        assert 123 in user_conversations
+        assert user_conversations[123]["stage"] == "collecting_info"
+
+    async def test_order_intent_all_fields_provided(self, mocker) -> None:
+        mocker.patch(
+            "bot.handlers.process_customer_message",
+            return_value={
+                "intent": "order",
+                "reply": "Got it!",
+                "data": {
+                    "items": [{"item_id": "S1", "name": "Teriyaki Chicken", "quantity": 2, "unit_price": 9.00}],
+                    "total": 18.00,
+                    "customer_name": "John Smith",
+                    "telephone": "07700 900123",
+                    "delivery_address": "Flat 3, 10 London Road",
+                    "delivery_time": "",
+                    "allergies": "",
+                },
+            },
+        )
+        update = _make_update("2 teriyaki chicken, John Smith, 07700 900123, Flat 3")
+        context = MagicMock()
+        result = await handle_message(update, context)
         assert result == AWAITING_CONFIRMATION
         reply_text = update.message.reply_text.call_args[0][0]
         assert "Order Summary" in reply_text
         assert "£18.00" in reply_text
+        assert "John Smith" in reply_text
+        assert "07700 900123" in reply_text
+        assert "Flat 3" in reply_text
         assert 123 in user_conversations
 
     async def test_unknown_intent(self, mocker) -> None:
@@ -137,7 +171,11 @@ class TestConfirmOrder:
         mocker.patch.object(SheetsClient, "write_feedback")
         chat_id = 123
         user_conversations[chat_id] = {
-            "pending_order": {"customer_name": "Tester"},
+            "pending_order": {
+                "customer_name": "Tester",
+                "telephone": "07700 900123",
+                "delivery_address": "Flat 3",
+            },
             "items": [{"item_id": "S1", "name": "Chicken Bowl", "quantity": 1, "unit_price": 9.00}],
             "total": 9.00,
         }
@@ -148,6 +186,8 @@ class TestConfirmOrder:
         update.message.reply_text.assert_awaited()
         text = update.message.reply_text.call_args[0][0]
         assert "confirmed" in text.lower()
+        assert "07700 900123" in text
+        assert "Flat 3" in text
         assert chat_id not in user_conversations
 
     async def test_cancel(self) -> None:

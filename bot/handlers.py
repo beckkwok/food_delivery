@@ -14,6 +14,8 @@ AWAITING_CONFIRMATION = 1
 user_conversations: dict[int, dict] = {}
 pending_feedback: set[int] = set()
 
+REQUIRED_FIELDS = ["customer_name", "telephone", "delivery_address"]
+
 
 def mark_feedback_pending(chat_id: int) -> None:
     pending_feedback.add(chat_id)
@@ -29,9 +31,24 @@ async def start(update: Update, context: CallbackContext) -> int | None:
         f"R1. Beef Rice Bowl w/ Miso Soup — \u00a39.50\n"
         f"R2. Karaage Fried Chicken Rice Bowl w/ Miso Soup — \u00a39.00\n"
         f"R3. Chicken & Egg Rice Bowl w/ Miso Soup — \u00a38.00\n\n"
-        f"Order by saying e.g. \"2 teriyaki chicken and 1 beef bowl\" or \"兩份照燒雞扒丼\"."
+        f"Order by saying e.g. \"2 teriyaki chicken and 1 beef bowl\" or \"兩份照燒雞扒丼\".\n"
+        f"Please include your **name, phone number, and delivery address** in your order."
     )
     await update.message.reply_text(reply)
+
+
+def _missing_fields(data: dict) -> list[str]:
+    labels = {
+        "customer_name": "your name",
+        "telephone": "your phone number",
+        "delivery_address": "your delivery address",
+    }
+    missing = []
+    for field in REQUIRED_FIELDS:
+        val = data.get(field, "").strip()
+        if not val:
+            missing.append(labels[field])
+    return missing
 
 
 async def handle_message(update: Update, context: CallbackContext) -> int:
@@ -68,7 +85,13 @@ async def handle_message(update: Update, context: CallbackContext) -> int:
         )
         return ConversationHandler.END
 
-    result = process_customer_message(text)
+    prev = user_conversations.get(chat_id, {})
+    merged_text = text
+    if prev.get("stage") == "collecting_info":
+        original = prev.get("original_text", "")
+        merged_text = f"{original} Additional info: {text}"
+
+    result = process_customer_message(merged_text)
     intent = result.get("intent", "unknown")
     reply = result.get("reply", "How can I help you?")
     data = result.get("data", {})
@@ -77,6 +100,21 @@ async def handle_message(update: Update, context: CallbackContext) -> int:
         items = data.get("items", [])
         total = data.get("total", 0)
         if items and total > 0:
+            missing = _missing_fields(data)
+            if missing:
+                user_conversations[chat_id] = {
+                    "stage": "collecting_info",
+                    "original_text": merged_text,
+                    "pending_order": data,
+                    "items": items,
+                    "total": total,
+                }
+                ask = ", ".join(missing)
+                await update.message.reply_text(
+                    f"{reply}\n\nPlease also provide: **{ask}**."
+                )
+                return ConversationHandler.END
+
             summary_lines = ["**Order Summary:**"]
             for item in items:
                 summary_lines.append(
@@ -84,12 +122,13 @@ async def handle_message(update: Update, context: CallbackContext) -> int:
                     f"@ \u00a3{item.get('unit_price', 0):.2f}"
                 )
             summary_lines.append(f"\n**Total: \u00a3{total:.2f}**")
-            if data.get("allergies"):
-                summary_lines.append(f"Allergies: {data['allergies']}")
-            if data.get("delivery_address"):
-                summary_lines.append(f"Deliver to: {data['delivery_address']}")
+            summary_lines.append(f"**Name:** {data.get('customer_name', '')}")
+            summary_lines.append(f"**Phone:** {data.get('telephone', '')}")
+            summary_lines.append(f"**Address:** {data.get('delivery_address', '')}")
             if data.get("delivery_time"):
-                summary_lines.append(f"Delivery time: {data['delivery_time']}")
+                summary_lines.append(f"**Delivery time:** {data['delivery_time']}")
+            if data.get("allergies"):
+                summary_lines.append(f"**Allergies:** {data['allergies']}")
             summary_lines.append(
                 "\nReply **Confirm** to place this order, or tell me what to change."
             )
@@ -113,13 +152,16 @@ async def confirm_order(update: Update, context: CallbackContext) -> int:
     if text in ("confirm", "confirm order", "yes", "y", "確認", "係"):
         conv = user_conversations.get(chat_id)
         if not conv:
-            await update.message.reply_text("No pending order found. Send your order again.")
+            await update.message.reply_text(
+                "No pending order found. Send your order again."
+            )
             return ConversationHandler.END
 
         data = conv["pending_order"]
         sheets = SheetsClient()
         order_id = sheets.create_order(
             customer_name=data.get("customer_name", "Guest"),
+            telephone=data.get("telephone", ""),
             telegram_id=chat_id,
             items=conv["items"],
             total=conv["total"],
@@ -135,6 +177,9 @@ async def confirm_order(update: Update, context: CallbackContext) -> int:
         msg = (
             f"Order confirmed! ✅\n"
             f"Order ID: {order_id}\n"
+            f"Name: {data.get('customer_name', '')}\n"
+            f"Phone: {data.get('telephone', '')}\n"
+            f"Address: {data.get('delivery_address', '')}\n"
             f"Total: \u00a3{conv['total']:.2f}\n\n"
             f"Your food will be prepared and delivered. Thank you! 🍱"
         )
@@ -153,6 +198,7 @@ async def confirm_order(update: Update, context: CallbackContext) -> int:
 async def _notify_owner(context: CallbackContext, order_id: str, conv: dict) -> None:
     if not OWNER_TELEGRAM_ID:
         return
+    data = conv.get("pending_order", {})
     items_str = "\n".join(
         f"  {it.get('name', '?')} x{it.get('quantity', 1)}"
         for it in conv.get("items", [])
@@ -160,9 +206,13 @@ async def _notify_owner(context: CallbackContext, order_id: str, conv: dict) -> 
     msg = (
         f"\U0001f195 **New Order!**\n"
         f"Order ID: {order_id}\n"
+        f"Name: {data.get('customer_name', '?')}\n"
+        f"Phone: {data.get('telephone', '?')}\n"
+        f"Address: {data.get('delivery_address', '?')}\n"
         f"Items:\n{items_str}\n"
         f"Total: \u00a3{conv['total']:.2f}\n"
-        f"Allergies: {conv['pending_order'].get('allergies', 'None')}"
+        f"Delivery time: {data.get('delivery_time', 'TBC')}\n"
+        f"Allergies: {data.get('allergies', 'None')}"
     )
     try:
         await context.bot.send_message(chat_id=OWNER_TELEGRAM_ID, text=msg)

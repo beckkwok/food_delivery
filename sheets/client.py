@@ -65,15 +65,17 @@ class SheetsClient:
 
     # -- orders ------------------------------------------------------------
 
-    def create_order(self, customer_name: str, telegram_id: int, items: list[dict],
-                     total: float, allergies: str, instructions: str,
-                     delivery_address: str, delivery_time: str, language: str) -> str:
+    def create_order(self, customer_name: str, telephone: str, telegram_id: int,
+                     items: list[dict], total: float, allergies: str,
+                     instructions: str, delivery_address: str,
+                     delivery_time: str, language: str) -> str:
         order_id = generate_order_id()
         now = datetime.now().isoformat()
         row = [
             order_id,
             str(telegram_id),
             customer_name,
+            telephone,
             json.dumps(items, ensure_ascii=False),
             total,
             allergies,

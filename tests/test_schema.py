@@ -15,7 +15,7 @@ class TestOrdersHeaders:
         assert required.issubset(set(ORDERS_HEADERS))
 
     def test_length(self) -> None:
-        assert len(ORDERS_HEADERS) == 13
+        assert len(ORDERS_HEADERS) == 14
 
 
 class TestMenuHeaders:

@@ -21,6 +21,7 @@ class TestSheetsClient:
         client = SheetsClient()
         oid = client.create_order(
             customer_name="John",
+            telephone="07700 900123",
             telegram_id=12345,
             items=[{"item_id": "S1", "name": "Teriyaki Chicken", "quantity": 1, "unit_price": 9.00}],
             total=9.00,
@@ -41,6 +42,7 @@ class TestSheetsClient:
         assert row[0] == oid
         assert row[1] == "12345"
         assert row[2] == "John"
+        assert row[3] == "07700 900123"
 
     def test_get_menu(self, mock_gspread) -> None:
         ws = mock_gspread["ws"]

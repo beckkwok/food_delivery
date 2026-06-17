@@ -117,10 +117,25 @@ class SheetsClient:
     def upsert_customer(self, telegram_id: int, first_name: str,
                         last_name: str = "", phone: str = "",
                         address: str = "") -> None:
-        records = self._get_all_records("Customers")
-        for rec in records:
+        ws = self._worksheet("Customers")
+        records = ws.get_all_records()
+        header = ws.row_values(1)
+
+        name_col = header.index("FirstName") + 1
+        phone_col = header.index("Phone") + 1
+        addr_col = header.index("Address") + 1
+        id_col = header.index("TelegramID") + 1
+
+        for i, rec in enumerate(records, start=2):
             if str(rec.get("TelegramID")) == str(telegram_id):
+                if first_name:
+                    ws.update_cell(i, name_col, first_name)
+                if phone:
+                    ws.update_cell(i, phone_col, phone)
+                if address:
+                    ws.update_cell(i, addr_col, address)
                 return
+
         now = datetime.now().isoformat()
         row = [
             f"CUST-{telegram_id}",
@@ -133,7 +148,7 @@ class SheetsClient:
             "",
             now,
         ]
-        self._append_row("Customers", row)
+        ws.append_row(row, value_input_option="USER_ENTERED")
 
     # -- feedback ----------------------------------------------------------
 

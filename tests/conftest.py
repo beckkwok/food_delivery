@@ -19,7 +19,10 @@ def reset_sheets_singleton() -> Generator[None, None, None]:
 @pytest.fixture
 def mock_gspread(mocker) -> Generator[dict[str, Any], None, None]:
     mock_ws = MagicMock()
-    mock_ws.row_values.return_value = []
+    mock_ws.row_values.return_value = [
+        "CustomerID", "TelegramID", "FirstName", "LastName",
+        "Phone", "Address", "TotalOrders", "LastOrderDate", "FirstSeen",
+    ]
     mock_ws.get_all_records.return_value = []
     mock_ws.append_row = MagicMock()
 

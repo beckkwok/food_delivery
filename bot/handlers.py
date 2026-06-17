@@ -96,6 +96,15 @@ async def handle_message(update: Update, context: CallbackContext) -> int:
     reply = result.get("reply", "How can I help you?")
     data = result.get("data", {})
 
+    if data.get("customer_name") or data.get("telephone") or data.get("delivery_address"):
+        sheets.upsert_customer(
+            telegram_id=chat_id,
+            first_name=data.get("customer_name", user.first_name or "Guest"),
+            last_name=user.last_name or "",
+            phone=data.get("telephone", ""),
+            address=data.get("delivery_address", ""),
+        )
+
     if intent == "order":
         items = data.get("items", [])
         total = data.get("total", 0)
@@ -159,6 +168,15 @@ async def confirm_order(update: Update, context: CallbackContext) -> int:
 
         data = conv["pending_order"]
         sheets = SheetsClient()
+
+        sheets.upsert_customer(
+            telegram_id=chat_id,
+            first_name=data.get("customer_name", "Guest"),
+            last_name="",
+            phone=data.get("telephone", ""),
+            address=data.get("delivery_address", ""),
+        )
+
         order_id = sheets.create_order(
             customer_name=data.get("customer_name", "Guest"),
             telephone=data.get("telephone", ""),

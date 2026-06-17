@@ -116,14 +116,30 @@ class TestSheetsClient:
         client.upsert_customer(telegram_id=999, first_name="Alice", last_name="W")
         assert ws.append_row.called
 
-    def test_upsert_customer_existing(self, mock_gspread) -> None:
+    def test_upsert_customer_existing_no_update(self, mock_gspread) -> None:
         ws = mock_gspread["ws"]
         ws.get_all_records.return_value = [
-            {"TelegramID": "999", "FirstName": "Alice"}
+            {"TelegramID": "999", "FirstName": "Alice", "Phone": "", "Address": ""}
         ]
+        ws.row_values.return_value = ["CustomerID", "TelegramID", "FirstName", "LastName", "Phone", "Address"]
         client = SheetsClient()
-        client.upsert_customer(telegram_id=999, first_name="Alice", last_name="W")
+        client.upsert_customer(telegram_id=999, first_name="", last_name="W")
         assert not ws.append_row.called
+        assert not ws.update_cell.called
+
+    def test_upsert_customer_existing_updates_fields(self, mock_gspread) -> None:
+        ws = mock_gspread["ws"]
+        ws.get_all_records.return_value = [
+            {"TelegramID": "999", "FirstName": "Alice", "Phone": "", "Address": ""}
+        ]
+        ws.row_values.return_value = ["CustomerID", "TelegramID", "FirstName", "LastName", "Phone", "Address"]
+        client = SheetsClient()
+        client.upsert_customer(
+            telegram_id=999, first_name="Alice",
+            phone="07700 900123", address="Flat 3",
+        )
+        assert not ws.append_row.called
+        assert ws.update_cell.called
 
     def test_write_feedback(self, mock_gspread) -> None:
         ws = mock_gspread["ws"]
